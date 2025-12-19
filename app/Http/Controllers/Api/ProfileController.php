@@ -12,9 +12,9 @@ class ProfileController extends Controller
     /**
      * Get authenticated user's profile
      */
-    public function show()
+    public function show(Request $request)
     {
-        $profile = Profile::where('user_id', auth()->id())->with('user')->first();
+        $profile = Profile::find($request->user()->id);
 
         if (!$profile) {
             return response()->json([
@@ -39,7 +39,7 @@ class ProfileController extends Controller
      */
     public function update(Request $request)
     {
-        $profile = Profile::where('user_id', auth()->id())->first();
+        $profile = Profile::find($request->user()->id);
 
         if (!$profile) {
             return response()->json([

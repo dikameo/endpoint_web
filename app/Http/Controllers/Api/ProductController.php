@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Helpers\IdGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class ProductController extends Controller
 {
@@ -50,7 +52,8 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         // Check if user is admin
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
         if ($user->profile?->role !== 'admin') {
             return response()->json([
@@ -67,7 +70,9 @@ class ProductController extends Controller
             'price' => 'required|numeric|min:0',
             'capacity' => 'nullable|string|max:100',
             'category' => 'nullable|string|max:100',
+            'description' => 'nullable|string',
             'specifications' => 'nullable|array',
+            'image_urls' => 'nullable|array',
             'image' => 'nullable|file|mimes:jpg,jpeg,png|max:10240',
             'is_active' => 'nullable|boolean',
         ]);
@@ -83,14 +88,19 @@ class ProductController extends Controller
             ], 422);
         }
 
+        // Generate unique Product ID (CRITICAL: id is text, not auto increment!)
+        $productId = IdGenerator::generateProductId($request->category);
+
         $data = $request->except('image');
-        $data['created_by'] = auth()->id();
+        $data['id'] = $productId;             // REQUIRED: Manual ID for text PK
+        $data['created_by'] = (string) Auth::id();   // UUID from auth.users
 
         // Handle image upload
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $imageName = time() . '_' . $image->getClientOriginalName();
             $imagePath = $image->storeAs('uploads/products', $imageName, 'public');
+            // image_urls is JSONB array in database
             $data['image_urls'] = [Storage::url($imagePath)];
         }
 
@@ -134,7 +144,8 @@ class ProductController extends Controller
     public function update(Request $request, string $id)
     {
         // Check if user is admin
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
         if ($user->profile?->role !== 'admin') {
             return response()->json([
@@ -205,7 +216,8 @@ class ProductController extends Controller
     public function destroy(string $id)
     {
         // Check if user is admin
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
         if ($user->profile?->role !== 'admin') {
             return response()->json([

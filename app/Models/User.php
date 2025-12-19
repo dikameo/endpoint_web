@@ -8,16 +8,24 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Tymon\JWTAuth\Contracts\JWTSubject;
+use Laravel\Sanctum\HasApiTokens;
 
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable implements JWTSubject, FilamentUser
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, Notifiable, HasRoles, HasApiTokens;
+
+    /**
+     * Use Supabase Auth table (auth.users)
+     * Primary key is UUID from Supabase Auth
+     */
+    protected $table = 'auth.users';
+    protected $keyType = 'string';
+    public $incrementing = false;
 
     /**
      * The attributes that are mass assignable.
@@ -25,9 +33,13 @@ class User extends Authenticatable implements JWTSubject, FilamentUser
      * @var list<string>
      */
     protected $fillable = [
-        'name',
+        'id',                    // UUID from Supabase Auth
         'email',
-        'password',
+        'encrypted_password',    // Supabase uses this instead of 'password'
+        'raw_user_meta_data',    // JSONB for custom user data (name, etc)
+        'raw_app_meta_data',     // JSONB for app metadata
+        'email_confirmed_at',
+        'phone',
     ];
 
     /**
@@ -36,8 +48,11 @@ class User extends Authenticatable implements JWTSubject, FilamentUser
      * @var list<string>
      */
     protected $hidden = [
-        'password',
-        'remember_token',
+        'encrypted_password',
+        'recovery_token',
+        'email_change_token_new',
+        'email_change_token_current',
+        'confirmation_token',
     ];
 
     /**
@@ -48,25 +63,58 @@ class User extends Authenticatable implements JWTSubject, FilamentUser
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'id' => 'string',
+            'email_confirmed_at' => 'datetime',
+            'raw_user_meta_data' => 'json',  // JSONB for storing name, avatar, etc
+            'raw_app_meta_data' => 'json',   // JSONB for app-specific data
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+            'last_sign_in_at' => 'datetime',
+            'confirmed_at' => 'datetime',
         ];
     }
 
     /**
-     * Get the identifier that will be stored in the subject claim of the JWT.
+     * Get user's name from metadata
+     * Supabase stores custom fields in raw_user_meta_data
      */
-    public function getJWTIdentifier()
+    public function getNameAttribute(): ?string
     {
-        return $this->getKey();
+        return $this->raw_user_meta_data['name'] ?? $this->email;
     }
 
     /**
-     * Return a key value array, containing any custom claims to be added to the JWT.
+     * Set user's name to metadata
      */
-    public function getJWTCustomClaims()
+    public function setNameAttribute($value): void
     {
-        return [];
+        $metadata = $this->raw_user_meta_data ?? [];
+        $metadata['name'] = $value;
+        $this->raw_user_meta_data = $metadata;
+    }
+
+    /**
+     * Override password accessor for Supabase
+     */
+    public function getAuthPassword()
+    {
+        return $this->encrypted_password;
+    }
+
+    /**
+     * Get the name of the unique identifier for the user
+     */
+    public function getAuthIdentifierName()
+    {
+        return 'id';
+    }
+
+    /**
+     * Get the unique identifier for the user
+     */
+    public function getAuthIdentifier()
+    {
+        return $this->id;
     }
 
     public function profile(): HasOne

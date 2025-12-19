@@ -3,21 +3,27 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
-    use SoftDeletes;
+    /**
+     * Primary key is text/string, not auto increment
+     * Supabase schema: id = text
+     */
+    protected $keyType = 'string';
+    public $incrementing = false;
 
     protected $fillable = [
+        'id',              // Required because not auto increment
         'name',
         'price',
         'capacity',
         'category',
         'specifications',
         'image_urls',
+        'description',     // Added from schema
         'rating',
         'review_count',
         'is_active',
@@ -25,8 +31,9 @@ class Product extends Model
     ];
 
     protected $casts = [
-        'specifications' => 'array',
-        'image_urls' => 'array',
+        'created_by' => 'string',        // UUID from auth.users
+        'specifications' => 'json',      // JSONB → json (not array!)
+        'image_urls' => 'json',          // JSONB → json (not array!)
         'price' => 'decimal:2',
         'rating' => 'decimal:2',
         'is_active' => 'boolean',
@@ -38,7 +45,12 @@ class Product extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function toArray()
+    /**
+     * Convert the model instance to an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
     {
         $attributes = parent::toArray();
 
@@ -48,7 +60,7 @@ class Product extends Model
                 if (filter_var($path, FILTER_VALIDATE_URL)) {
                     return $path;
                 }
-                return Storage::disk('s3')->url($path);
+                return Storage::url($path);
             }, $attributes['image_urls']);
         }
 

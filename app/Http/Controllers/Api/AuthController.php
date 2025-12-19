@@ -8,7 +8,6 @@ use App\Models\Profile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
@@ -43,13 +42,14 @@ class AuthController extends Controller
 
         // Create profile
         Profile::create([
-            'user_id' => $user->id,
-            'name' => $request->name,
-            'phone' => $request->phone,
-            'role' => 'customer',
+            'id' => $user->id,
+            'email' => $user->email,
+            'role' => 'user',
+            'created_at' => now(),
+            'updated_at' => now()
         ]);
 
-        $token = JWTAuth::fromUser($user);
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'success' => true,
@@ -82,9 +82,9 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $credentials = $request->only('email', 'password');
+        $user = User::where('email', $request->email)->first();
 
-        if (!$token = JWTAuth::attempt($credentials)) {
+        if (!$user || !Hash::check($request->password, $user->encrypted_password)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid credentials',
@@ -94,8 +94,8 @@ class AuthController extends Controller
                 ]
             ], 401);
         }
-
-        $user = auth()->user();
+        
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'success' => true,
@@ -110,23 +110,41 @@ class AuthController extends Controller
     /**
      * Get authenticated user profile
      */
-    public function profile()
+    public function profile(Request $request)
     {
-        $user = User::with('profile')->find(auth()->id());
+        $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+                'error' => [
+                    'code' => 'UNAUTHORIZED',
+                    'details' => 'User not authenticated'
+                ]
+            ], 401);
+        }
+
+        $user->load('profile');
 
         return response()->json([
             'success' => true,
             'message' => 'Profile retrieved successfully',
-            'data' => $user->toArray()
+            'data' => [
+                'id' => $user->id,
+                'email' => $user->email,
+                'name' => $user->name,
+                'profile' => $user->profile
+            ]
         ]);
     }
 
     /**
      * Logout user
      */
-    public function logout()
+    public function logout(Request $request)
     {
-        auth()->logout();
+        $request->user()->currentAccessToken()->delete();
 
         return response()->json([
             'success' => true,

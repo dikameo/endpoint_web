@@ -3,19 +3,31 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Profile extends Model
 {
+    /**
+     * Primary key is UUID from auth.users
+     * profiles.id = auth.users.id (same value, 1-to-1)
+     * Supabase schema: id = uuid (PK, FK to auth.users)
+     */
+    protected $keyType = 'string';
+    public $incrementing = false;
+
     protected $fillable = [
-        'user_id',
+        'id',       // UUID from auth.users
+        'email',    // Required NOT NULL UNIQUE
         'name',
         'phone',
         'role',
     ];
 
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
+    protected $casts = [
+        'id' => 'string',  // UUID
+    ];
+
+    /**
+     * Note: No user relationship needed
+     * profiles.id IS the user id (not a foreign key column)
+     */
 }

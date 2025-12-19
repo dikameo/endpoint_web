@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Helpers\IdGenerator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Midtrans\Config;
 use Midtrans\Snap;
@@ -16,7 +18,8 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
 
         if ($user->profile?->role === 'admin') {
@@ -69,45 +72,61 @@ class OrderController extends Controller
             ], 422);
         }
 
+        // Generate unique Order ID (CRITICAL: id is text, not auto increment!)
+        $orderId = IdGenerator::generateOrderId();
+
         // Configure Midtrans
         Config::$serverKey = config('midtrans.server_key');
         Config::$isProduction = config('midtrans.is_production');
-        Config::$isSanitized = config('midtrans.is_sanitized');
-        Config::$is3ds = config('midtrans.is_3ds');
+        Config::$isSanitized = config('midtrans.is_sanitized', true);
+        Config::$is3ds = config('midtrans.is_3ds', true);
 
         $orderData = [
-            'user_id' => auth()->id(),
-            'items' => $request->items,
-            'status' => 'pending',
+            'id' => $orderId,              // REQUIRED: Manual ID for text PK
+            'user_id' => (string) Auth::id(),     // UUID from auth.users
+            'items' => $request->items,    // Will be cast to JSON
+            'status' => 'pendingPayment',  // Match CHECK constraint
+            'order_date' => now(),
             'subtotal' => $request->subtotal,
             'shipping_cost' => $request->shipping_cost ?? 0,
             'total' => $request->total,
             'shipping_address' => $request->shipping_address,
             'payment_method' => $request->payment_method,
-            'tracking_number' => 'TRK-' . strtoupper(uniqid()),
+            'tracking_number' => IdGenerator::generateTrackingNumber(),
         ];
 
         // Generate Snap Token if not COD
         if ($request->payment_method !== 'cod' && $request->payment_method !== 'cash_on_delivery') {
             try {
+                /** @var \App\Models\User $authUser */
+                $authUser = Auth::user();
+                
                 $params = [
                     'transaction_details' => [
-                        'order_id' => 'ORDER-' . uniqid() . '-' . time(), // Unique Order ID required by Midtrans
+                        'order_id' => $orderId, // Use our generated Order ID
                         'gross_amount' => (int) $request->total,
                     ],
                     'customer_details' => [
-                        'first_name' => auth()->user()->name,
-                        'email' => auth()->user()->email,
-                        'phone' => auth()->user()->profile?->phone ?? '',
+                        'first_name' => $authUser->name ?? 'Customer',
+                        'email' => $authUser->email,
+                        'phone' => $authUser->phone ?? '',
                     ],
                 ];
 
                 $snapToken = Snap::getSnapToken($params);
-                $orderData['snap_token'] = $snapToken;
+                // Note: snap_token column doesn't exist in schema
+                // Remove this if column not added to Supabase
+                // $orderData['snap_token'] = $snapToken;
+                
             } catch (\Exception $e) {
-                // If Midtrans fail, we still create order but maybe log error
-                // or return error? Let's just log and continue for now
-                // \Log::error('Midtrans Error: ' . $e->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment gateway error',
+                    'error' => [
+                        'code' => 'PAYMENT_ERROR',
+                        'details' => $e->getMessage()
+                    ]
+                ], 500);
             }
         }
 
@@ -125,7 +144,8 @@ class OrderController extends Controller
      */
     public function show(string $id)
     {
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
         
         if ($user->profile?->role === 'admin') {
@@ -157,7 +177,8 @@ class OrderController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
 
         if ($user->profile?->role === 'admin') {
@@ -242,7 +263,8 @@ class OrderController extends Controller
      */
     public function destroy(string $id)
     {
-        $user = auth()->user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $user->load('profile');
 
         if ($user->profile?->role === 'admin') {
