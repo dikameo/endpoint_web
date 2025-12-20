@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Profile;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -18,7 +20,7 @@ class AuthController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'required|string|email|max:255',
             'password' => 'required|string|min:6',
             'phone' => 'nullable|string|max:20',
         ]);
@@ -34,19 +36,39 @@ class AuthController extends Controller
             ], 422);
         }
 
+        // Check if email already exists in auth.users
+        $existingUser = DB::table('auth.users')->where('email', $request->email)->first();
+        if ($existingUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'error' => [
+                    'code' => 'VALIDATION_ERROR',
+                    'details' => ['email' => ['The email has already been taken.']]
+                ]
+            ], 422);
+        }
+
+        // Generate UUID for Supabase auth.users table
+        $userId = Str::uuid()->toString();
+
         $user = User::create([
-            'name' => $request->name,
+            'id' => $userId,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'encrypted_password' => Hash::make($request->password),
+            'raw_user_meta_data' => [
+                'name' => $request->name,
+            ],
+            'phone' => $request->phone,
         ]);
 
         // Create profile
         Profile::create([
-            'id' => $user->id,
-            'email' => $user->email,
-            'role' => 'user',
-            'created_at' => now(),
-            'updated_at' => now()
+            'id' => $userId,
+            'email' => $request->email,
+            'name' => $request->name,
+            'phone' => $request->phone,
+            'role' => 'customer',
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;

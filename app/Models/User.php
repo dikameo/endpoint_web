@@ -119,7 +119,8 @@ class User extends Authenticatable implements FilamentUser
 
     public function profile(): HasOne
     {
-        return $this->hasOne(Profile::class);
+        // Supabase: profiles.id = auth.users.id (same UUID, 1-to-1)
+        return $this->hasOne(Profile::class, 'id', 'id');
     }
 
     public function orders(): HasMany
