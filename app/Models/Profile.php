@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Profile extends Model
 {
@@ -27,7 +28,11 @@ class Profile extends Model
     ];
 
     /**
-     * Note: No user relationship needed
-     * profiles.id IS the user id (not a foreign key column)
+     * Get the user that owns the profile.
+     * profiles.id = auth.users.id (same UUID, 1-to-1 relationship)
      */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'id', 'id');
+    }
 }

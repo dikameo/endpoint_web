@@ -72,13 +72,15 @@ class ProfileController extends Controller
 
         // Also update user's name if provided
         if ($request->has('name')) {
-            auth()->user()->update(['name' => $request->name]);
+            $user = $request->user();
+            $user->name = $request->name;
+            $user->save();
         }
 
         return response()->json([
             'success' => true,
             'message' => 'Profile updated successfully',
-            'data' => $profile->fresh('user')
+            'data' => $profile->fresh()
         ]);
     }
 }
