@@ -8,31 +8,24 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Profile extends Model
 {
     /**
-     * Primary key is UUID from auth.users
-     * profiles.id = auth.users.id (same value, 1-to-1)
-     * Supabase schema: id = uuid (PK, FK to auth.users)
+     * Standard Laravel profiles table with bigint ID
+     * Foreign key: user_id references users(id)
      */
-    protected $keyType = 'string';
-    public $incrementing = false;
+    protected $table = 'profiles';
 
     protected $fillable = [
-        'id',       // UUID from auth.users
-        'email',    // Required NOT NULL UNIQUE
+        'user_id',
         'name',
         'phone',
         'role',
     ];
 
-    protected $casts = [
-        'id' => 'string',  // UUID
-    ];
-
     /**
      * Get the user that owns the profile.
-     * profiles.id = auth.users.id (same UUID, 1-to-1 relationship)
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'id', 'id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 }
+

@@ -22,7 +22,7 @@ class OrderController extends Controller
         $user = Auth::user();
         $user->load('profile');
 
-        if ($user->profile?->role === 'admin') {
+        if ($user->profile?->role === 'admin' || $user->hasRole('admin')) {
             $query = Order::query();
         } else {
             $query = Order::where('user_id', $user->id);
@@ -40,6 +40,34 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Orders retrieved successfully',
+            'data' => $orders
+        ]);
+    }
+
+    /**
+     * Display all orders (Admin only)
+     */
+    public function indexAll(Request $request)
+    {
+        $query = Order::query();
+
+        // Filter by status
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filter by user
+        if ($request->has('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        // Pagination
+        $perPage = $request->get('limit', 10);
+        $orders = $query->with('user')->latest('order_date')->paginate($perPage);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'All orders retrieved successfully',
             'data' => $orders
         ]);
     }
@@ -148,7 +176,7 @@ class OrderController extends Controller
         $user = Auth::user();
         $user->load('profile');
         
-        if ($user->profile?->role === 'admin') {
+        if ($user->profile?->role === 'admin' || $user->hasRole('admin')) {
             $order = Order::with('user')->find($id);
         } else {
             $order = Order::where('user_id', $user->id)->find($id);
@@ -181,7 +209,7 @@ class OrderController extends Controller
         $user = Auth::user();
         $user->load('profile');
 
-        if ($user->profile?->role === 'admin') {
+        if ($user->profile?->role === 'admin' || $user->hasRole('admin')) {
             $order = Order::find($id);
         } else {
             $order = Order::where('user_id', $user->id)->find($id);
@@ -199,7 +227,7 @@ class OrderController extends Controller
         }
 
         // Admin can update status and tracking
-        if ($user->profile?->role === 'admin') {
+        if ($user->profile?->role === 'admin' || $user->hasRole('admin')) {
             $validator = Validator::make($request->all(), [
                 'status' => 'sometimes|string',
                 'tracking_number' => 'sometimes|string',
@@ -267,7 +295,7 @@ class OrderController extends Controller
         $user = Auth::user();
         $user->load('profile');
 
-        if ($user->profile?->role === 'admin') {
+        if ($user->profile?->role === 'admin' || $user->hasRole('admin')) {
             $order = Order::find($id);
         } else {
             $order = Order::where('user_id', $user->id)->find($id);
@@ -285,7 +313,7 @@ class OrderController extends Controller
         }
 
         // Only allow deleting if order is still pending (unless admin)
-        if ($user->profile?->role !== 'admin' && $order->status !== 'pending') {
+        if (!($user->profile?->role === 'admin' || $user->hasRole('admin')) && $order->status !== 'pending') {
             return response()->json([
                 'success' => false,
                 'message' => 'Cannot delete order',

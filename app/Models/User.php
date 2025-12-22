@@ -20,12 +20,12 @@ class User extends Authenticatable implements FilamentUser
     use HasFactory, Notifiable, HasRoles, HasApiTokens;
 
     /**
-     * Use Supabase Auth table (auth.users)
-     * Primary key is UUID from Supabase Auth
+     * Standard Laravel users table
+     * Using string keyType for compatibility with polymorphic varchar columns
+     * (model_has_roles.model_id, model_has_permissions.model_id, personal_access_tokens.tokenable_id)
      */
-    protected $table = 'auth.users';
+    protected $table = 'users';
     protected $keyType = 'string';
-    public $incrementing = false;
 
     /**
      * The attributes that are mass assignable.
@@ -33,13 +33,9 @@ class User extends Authenticatable implements FilamentUser
      * @var list<string>
      */
     protected $fillable = [
-        'id',                    // UUID from Supabase Auth
+        'name',
         'email',
-        'encrypted_password',    // Supabase uses this instead of 'password'
-        'raw_user_meta_data',    // JSONB for custom user data (name, etc)
-        'raw_app_meta_data',     // JSONB for app metadata
-        'email_confirmed_at',
-        'phone',
+        'password',
     ];
 
     /**
@@ -48,11 +44,8 @@ class User extends Authenticatable implements FilamentUser
      * @var list<string>
      */
     protected $hidden = [
-        'encrypted_password',
-        'recovery_token',
-        'email_change_token_new',
-        'email_change_token_current',
-        'confirmation_token',
+        'password',
+        'remember_token',
     ];
 
     /**
@@ -64,63 +57,19 @@ class User extends Authenticatable implements FilamentUser
     {
         return [
             'id' => 'string',
-            'email_confirmed_at' => 'datetime',
-            'raw_user_meta_data' => 'json',  // JSONB for storing name, avatar, etc
-            'raw_app_meta_data' => 'json',   // JSONB for app-specific data
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-            'last_sign_in_at' => 'datetime',
-            'confirmed_at' => 'datetime',
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
         ];
     }
 
     /**
-     * Get user's name from metadata
-     * Supabase stores custom fields in raw_user_meta_data
+     * Guard name for spatie/laravel-permission
      */
-    public function getNameAttribute(): ?string
-    {
-        return $this->raw_user_meta_data['name'] ?? $this->email;
-    }
-
-    /**
-     * Set user's name to metadata
-     */
-    public function setNameAttribute($value): void
-    {
-        $metadata = $this->raw_user_meta_data ?? [];
-        $metadata['name'] = $value;
-        $this->raw_user_meta_data = $metadata;
-    }
-
-    /**
-     * Override password accessor for Supabase
-     */
-    public function getAuthPassword()
-    {
-        return $this->encrypted_password;
-    }
-
-    /**
-     * Get the name of the unique identifier for the user
-     */
-    public function getAuthIdentifierName()
-    {
-        return 'id';
-    }
-
-    /**
-     * Get the unique identifier for the user
-     */
-    public function getAuthIdentifier()
-    {
-        return $this->id;
-    }
+    protected $guard_name = 'sanctum';
 
     public function profile(): HasOne
     {
-        // Supabase: profiles.id = auth.users.id (same UUID, 1-to-1)
-        return $this->hasOne(Profile::class, 'id', 'id');
+        return $this->hasOne(Profile::class, 'user_id', 'id');
     }
 
     public function orders(): HasMany
@@ -140,6 +89,8 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->profile?->role === 'admin' || $this->hasRole('super_admin');
+        return $this->profile?->role === 'admin' || $this->hasRole('admin');
     }
 }
+
+

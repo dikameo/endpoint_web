@@ -6,10 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Profile;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 
 class AuthController extends Controller
 {
@@ -20,7 +19,7 @@ class AuthController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:6',
             'phone' => 'nullable|string|max:20',
         ]);
@@ -36,40 +35,26 @@ class AuthController extends Controller
             ], 422);
         }
 
-        // Check if email already exists in auth.users
-        $existingUser = DB::table('auth.users')->where('email', $request->email)->first();
-        if ($existingUser) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation error',
-                'error' => [
-                    'code' => 'VALIDATION_ERROR',
-                    'details' => ['email' => ['The email has already been taken.']]
-                ]
-            ], 422);
-        }
-
-        // Generate UUID for Supabase auth.users table
-        $userId = Str::uuid()->toString();
-
+        // Create user
         $user = User::create([
-            'id' => $userId,
+            'name' => $request->name,
             'email' => $request->email,
-            'encrypted_password' => Hash::make($request->password),
-            'raw_user_meta_data' => [
-                'name' => $request->name,
-            ],
-            'phone' => $request->phone,
+            'password' => Hash::make($request->password),
         ]);
 
         // Create profile
         Profile::create([
-            'id' => $userId,
-            'email' => $request->email,
+            'user_id' => $user->id,
             'name' => $request->name,
             'phone' => $request->phone,
             'role' => 'customer',
         ]);
+
+        // Assign default 'user' role
+        $userRole = Role::where('name', 'user')->where('guard_name', 'sanctum')->first();
+        if ($userRole) {
+            $user->roles()->attach($userRole->id, ['model_type' => User::class]);
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -77,7 +62,7 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'User registered successfully',
             'data' => [
-                'user' => $user,
+                'user' => $user->load('profile'),
                 'token' => $token,
             ]
         ], 201);
@@ -106,7 +91,7 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->encrypted_password)) {
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid credentials',
@@ -123,7 +108,7 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Login successful',
             'data' => [
-                'user' => $user,
+                'user' => $user->load('profile'),
                 'token' => $token,
             ]
         ]);
@@ -156,7 +141,8 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'email' => $user->email,
                 'name' => $user->name,
-                'profile' => $user->profile
+                'profile' => $user->profile,
+                'roles' => $user->getRoleNames(),
             ]
         ]);
     }
@@ -174,3 +160,4 @@ class AuthController extends Controller
         ]);
     }
 }
+

@@ -9,21 +9,17 @@ use Illuminate\Support\Facades\Storage;
 class Product extends Model
 {
     /**
-     * Primary key is text/string, not auto increment
-     * Supabase schema: id = text
+     * Standard Laravel products table with bigint auto-increment ID
      */
-    protected $keyType = 'string';
-    public $incrementing = false;
+    // Using default bigint auto-increment - no need to set keyType or incrementing
 
     protected $fillable = [
-        'id',              // Required because not auto increment
         'name',
         'price',
         'capacity',
         'category',
         'specifications',
         'image_urls',
-        'description',     // Added from schema
         'rating',
         'review_count',
         'is_active',
@@ -31,13 +27,13 @@ class Product extends Model
     ];
 
     protected $casts = [
-        'created_by' => 'string',        // UUID from auth.users
-        'specifications' => 'json',      // JSONB → json (not array!)
-        'image_urls' => 'json',          // JSONB → json (not array!)
+        'specifications' => 'json',
+        'image_urls' => 'json',
         'price' => 'decimal:2',
         'rating' => 'decimal:2',
         'is_active' => 'boolean',
         'review_count' => 'integer',
+        'created_by' => 'integer',
     ];
 
     public function creator(): BelongsTo
@@ -67,3 +63,4 @@ class Product extends Model
         return $attributes;
     }
 }
+

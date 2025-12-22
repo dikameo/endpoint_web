@@ -51,11 +51,11 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        // Check if user is admin
+        // Check if user is admin (via profile role or spatie role)
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $user->load('profile');
-        if ($user->profile?->role !== 'admin') {
+        if ($user->profile?->role !== 'admin' && !$user->hasRole('admin')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized',
@@ -65,12 +65,12 @@ class ProductController extends Controller
                 ]
             ], 403);
         }
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
             'capacity' => 'nullable|string|max:100',
             'category' => 'nullable|string|max:100',
-            'description' => 'nullable|string',
             'specifications' => 'nullable|array',
             'image_urls' => 'nullable|array',
             'image' => 'nullable|file|mimes:jpg,jpeg,png|max:10240',
@@ -88,12 +88,8 @@ class ProductController extends Controller
             ], 422);
         }
 
-        // Generate unique Product ID (CRITICAL: id is text, not auto increment!)
-        $productId = IdGenerator::generateProductId($request->category);
-
-        $data = $request->except('image');
-        $data['id'] = $productId;             // REQUIRED: Manual ID for text PK
-        $data['created_by'] = (string) Auth::id();   // UUID from auth.users
+        $data = $request->only(['name', 'price', 'capacity', 'category', 'specifications', 'image_urls', 'is_active']);
+        $data['created_by'] = Auth::id();
 
         // Handle image upload
         if ($request->hasFile('image')) {
